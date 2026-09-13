@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "mcp__unreal-mcp__list_toolsets",
+      "mcp__unreal-mcp__describe_toolset",
+      "mcp__unreal-mcp__call_tool",
+      "mcp__unreal-mcp__execute_python_code"
+    ]
+  }
+}
