@@ -70,8 +70,12 @@ public:
 protected:
 	virtual void OnRep_ActivateAbilities();
 
+	void EffectApplied(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle);
+
+	// Only the asset tags cross the wire — the full FGameplayEffectSpec is expensive
+	// to serialize and was sent on every single effect application
 	UFUNCTION(Client, Reliable)
-	void ClientEffectApplied(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle);
+	void ClientEffectApplied(const FGameplayTagContainer& AssetTags);
 
 private:
 	void ClearAbilitiesOfSlot(const FGameplayTag& SlotTag);

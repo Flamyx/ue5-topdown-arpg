@@ -16,7 +16,9 @@ AMeteoriteProjectile::AMeteoriteProjectile()
 	ProjectileMovement->InitialSpeed = 400.f;
 	ProjectileMovement->MaxSpeed = 500.f;
 	ProjectileMovement->bRotationFollowsVelocity = 1;
-	ProjectileMovement->ProjectileGravityScale = 0.1f;
+	// Zero gravity: the spell aims the meteor straight at the target location, and any
+	// gravity pulls it below that line so it lands short (400 u/s = long flight time)
+	ProjectileMovement->ProjectileGravityScale = 0.f;
 }
 
 void AMeteoriteProjectile::SetSphereRadius(float ChargeRatio)
@@ -27,11 +29,12 @@ void AMeteoriteProjectile::SetSphereRadius(float ChargeRatio)
 
 void AMeteoriteProjectile::BeginPlay()
 {
+	// Super already sets the life span, spawns the looping sound and binds the overlap.
+	// Do NOT rebind here: dynamic delegates bind by function *name*, so the parent's
+	// AddDynamic(this, &AAuraProjectile::OnOverlap) already dispatches to this class's
+	// override - binding "OnOverlap" a second time is a duplicate and trips the
+	// InvocationList[CurFunctionIndex] != InDelegate ensure in ScriptDelegates.h.
 	Super::BeginPlay();
-	SetLifeSpan(MaxLifeSpan);
-
-	Sphere->OnComponentBeginOverlap.AddDynamic(this, &AMeteoriteProjectile::OnOverlap);
-	LoopingSoundComponent = UGameplayStatics::SpawnSoundAttached(LoopingSound, GetRootComponent());
 }
 
 void AMeteoriteProjectile::Destroyed()
@@ -45,21 +48,23 @@ void AMeteoriteProjectile::Destroyed()
 
 void AMeteoriteProjectile::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	auto Avatar = DamageEffectParams.SourceASC->GetAvatarActor();
-	
-	if (Avatar == OtherActor || !UAuraAbilitySystemLibrary::IsNotFriend(OtherActor, Avatar)) 
+	// Instigator replicates; DamageEffectParams.SourceASC is null on clients
+	AActor* Avatar = GetInstigator();
+
+	if (Avatar == OtherActor || (Avatar && !UAuraAbilitySystemLibrary::IsNotFriend(OtherActor, Avatar)))
 		return;
-	
+
 	if (IsPendingKillPending())
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("PendingKill"));
 		return;
 	}
 
-	if (!bHit)
+	const bool bFirstHit = !bHit;
+	if (bFirstHit)
 		OnHit();
 
-	if (HasAuthority() && !bHit)
+	if (HasAuthority() && bFirstHit && IsValid(DamageEffectParams.SourceASC))
 	{
 		const TArray<AActor*> IgnoredActors = { Avatar };
 		TArray<AActor*> AffectedActors;

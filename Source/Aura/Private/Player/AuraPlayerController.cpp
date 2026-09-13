@@ -68,9 +68,13 @@ void AAuraPlayerController::CursorTrace()
 		{
 			LastActor->UnHighlightActor();
 		}
+		// Un-highlight, don't highlight: this branch runs on the first frame an ability grants
+		// Player.Block.CursorTrace, and it immediately forgets both pointers - so anything lit
+		// here stays lit with nothing left to clear it. Abilities that want a target lit while
+		// hover is blocked own that highlight themselves (see UElectrocuteCourse::SetPrimaryTarget).
 		if (ThisActor)
 		{
-			ThisActor->HighlightActor();
+			ThisActor->UnHighlightActor();
 		}
 		LastActor = nullptr;
 		ThisActor = nullptr;

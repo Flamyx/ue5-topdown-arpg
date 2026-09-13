@@ -11,7 +11,7 @@
 
 void UAuraAbilitySystemComponent::AbilityActorInfoSet()
 {
-	OnGameplayEffectAppliedDelegateToSelf.AddUObject(this, &UAuraAbilitySystemComponent::ClientEffectApplied);
+	OnGameplayEffectAppliedDelegateToSelf.AddUObject(this, &UAuraAbilitySystemComponent::EffectApplied);
 
 	/*const FAuraGameplayTags& GameplayTags = FAuraGameplayTags::Get();
 	GEngine->AddOnScreenDebugMessage(
@@ -346,12 +346,18 @@ void UAuraAbilitySystemComponent::ClearSlot(FGameplayAbilitySpec* AbilitySpec)
 	MarkAbilitySpecDirty(*AbilitySpec);
 }
 
-void UAuraAbilitySystemComponent::ClientEffectApplied_Implementation(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
+void UAuraAbilitySystemComponent::EffectApplied(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
 {
-	//GEngine->AddOnScreenDebugMessage(1, 8.f, FColor::Blue, FString("Effect Applied!"));
 	FGameplayTagContainer TagContainer;
 	EffectSpec.GetAllAssetTags(TagContainer);
+	if (TagContainer.Num() > 0)
+	{
+		ClientEffectApplied(TagContainer);
+	}
+}
 
-	EffectAssetTags.Broadcast(TagContainer);
+void UAuraAbilitySystemComponent::ClientEffectApplied_Implementation(const FGameplayTagContainer& AssetTags)
+{
+	EffectAssetTags.Broadcast(AssetTags);
 }
  

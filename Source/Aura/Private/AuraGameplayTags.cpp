@@ -387,4 +387,30 @@ void FAuraGameplayTags::InitializeNativeGameplayTags()
 		FName("Effect.Status.Applied"),
 		FString("Effect Status Applied")
 	);
+
+	/*
+	Gameplay Cue Tags
+	*/
+	GameplayTags.GameplayCue_MeleeImpact = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.MeleeImpact"),
+		FString("Melee Impact Cue")
+	);
+
+	GameplayTags.GameplayCue_ShockBurst = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.ShockBurst"),
+		FString("One-shot electric impact Cue")
+	);
+
+	GameplayTags.GameplayCue_ShockLoop = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.ShockLoop"),
+		FString("Looping electric arc Cue")
+	);
+
+	// Child of ShockLoop with no notify of its own, so the cue manager routes it to
+	// GC_ShockLoop. The cue tells the two roles apart via Parameters.OriginalTag -
+	// NOT MatchedTagName, which is the handler's tag (GameplayCue.ShockLoop) for both.
+	GameplayTags.GameplayCue_ShockLoop_Fork = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.ShockLoop.Fork"),
+		FString("Looping electric arc from the primary target to a forked target")
+	);
 }

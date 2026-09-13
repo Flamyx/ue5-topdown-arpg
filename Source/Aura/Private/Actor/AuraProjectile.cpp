@@ -78,14 +78,15 @@ void AAuraProjectile::Destroyed()
 void AAuraProjectile::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, 
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	//For multiplayer "As client" version
-	auto SourceActor = DamageEffectParams.SourceASC->GetAvatarActor();
-	if ( SourceActor == OtherActor) return;
+	// Instigator replicates, so this check works on clients too; DamageEffectParams
+	// does NOT replicate — SourceASC is only safe to touch on the authority below
+	AActor* SourceActor = GetInstigator();
+	if (SourceActor == OtherActor) return;
 
-	if (!UAuraAbilitySystemLibrary::IsNotFriend(SourceActor, OtherActor)) return;
+	if (SourceActor && !UAuraAbilitySystemLibrary::IsNotFriend(SourceActor, OtherActor)) return;
 
 	if (!bHit) OnHit();
-	
+
 	if (HasAuthority())
 	{
 		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
@@ -101,7 +102,10 @@ void AAuraProjectile::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor
 			Rotation.Pitch = 45.f;
 			
 			DamageEffectParams.KnockbackImpulse = Rotation.Vector() * DamageEffectParams.KnockbackImpulseMagnitude;
-			UAuraAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
+			if (IsValid(DamageEffectParams.SourceASC))
+			{
+				UAuraAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
+			}
 		}
 		Destroy();
 	}

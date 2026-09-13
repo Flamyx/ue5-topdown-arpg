@@ -60,7 +60,9 @@ bool FAuraGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bo
 		}
 	}
 
-	Ar.SerializeBits(&RepBits, 12);
+	// 13 bits are in use (0..12) — the count here must match or the archive
+	// misaligns and every field after it is read as garbage on the remote side
+	Ar.SerializeBits(&RepBits, 13);
 
 	if (RepBits & (1 << 0))
 	{
@@ -116,15 +118,14 @@ bool FAuraGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bo
 		Ar << DebuffDuration;
 		Ar << DebuffFrequency;
 		Ar << DebuffDamage;
-		
-		if (Ar.IsLoading())
+
+		// Must serialize in BOTH directions — if only the reader consumes the tag
+		// the bitstream misaligns and the remote side crashes/corrupts
+		if (!DamageType.IsValid())
 		{
-			if (!DamageType.IsValid())
-			{
-				DamageType = TSharedPtr<FGameplayTag>(new FGameplayTag());
-			}
-			DamageType->NetSerialize(Ar, Map, bOutSuccess);
+			DamageType = TSharedPtr<FGameplayTag>(new FGameplayTag());
 		}
+		DamageType->NetSerialize(Ar, Map, bOutSuccess);
 	}
 	if  (RepBits & (1 << 10))
 	{

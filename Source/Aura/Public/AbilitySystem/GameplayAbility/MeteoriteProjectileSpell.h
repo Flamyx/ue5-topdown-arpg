@@ -39,9 +39,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSubclassOf<AActor> RedCircleActor;
 
-private:
+	// Writable from BP so the WaitInputRelease-based graph can feed TimeHeld straight
+	// in before calling SpawnProjectile (which clamps it to [0, MaxChargeTime])
+	UPROPERTY(BlueprintReadWrite, Category = "Charge")
 	float ChargeTime = 0.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Charge")
+	float MaxChargeTime = 3.f;
+
+private:
 	FTimerHandle ChargeTimerHandle;
 
 	UPROPERTY(EditAnywhere)
@@ -54,10 +60,7 @@ private:
 	FVector2D SpawnOffsetBounds;
 
 	UPROPERTY(EditAnywhere)
-	float MaxChargeTime = 3.f;
-
-	UPROPERTY(EditAnywhere)
-	float FChargeTick = .2;
+	float FChargeTick = .2f;
 
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<AMeteoriteProjectile> ProjectileClass;

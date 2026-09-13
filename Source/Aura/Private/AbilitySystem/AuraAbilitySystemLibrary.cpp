@@ -13,7 +13,22 @@
 #include "AuraAbilityTypes.h"
 #include "AuraAbilityTypes.h"
 #include "AuraGameplayTags.h"
+#include "Engine/Engine.h"
 #include "Game/AuraGameStateBase.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
+#include "GameFramework/GameModeBase.h"
+
+#if ENABLE_DRAW_DEBUG
+static TAutoConsoleVariable<int32> CVarAuraShowRadiusDebug(
+	TEXT("Aura.ShowRadiusDebug"),
+	0,
+	TEXT("Draw the query sphere used by GetLivePlayersWithinRadius.\n")
+	TEXT("0: off (default)\n")
+	TEXT("1: on"),
+	ECVF_Cheat);
+#endif
 
 UOverlayWidgetController* UAuraAbilitySystemLibrary::GetOverlayWidgetContoller(const UObject* WorldContextObject)
 {
@@ -86,22 +101,19 @@ bool UAuraAbilitySystemLibrary::UpdateOverlay(const UObject* WorldContextObject)
 
 FGameplayTag UAuraAbilitySystemLibrary::FindInputTagFromAbilityInfo(const UObject* WorldContextObject, const FGameplayTag& AbilityTag)
 {
-	const AAuraGameStateBase* AuraGameState = Cast<AAuraGameStateBase>(UGameplayStatics::GetGameState(WorldContextObject));
-	if (AuraGameState == nullptr) return FGameplayTag();
-	auto AbilityInfo = AuraGameState->AbilityInfo;
+	// Routed through GetAbilityInfo so this survives the client-side window where the
+	// GameState has not replicated in yet (see the comment there)
+	UAbilityInfo* AbilityInfo = GetAbilityInfo(WorldContextObject);
+	if (AbilityInfo == nullptr) return FGameplayTag();
 	return AbilityInfo->GetAbilityInfo(AbilityTag).InputTag;
-	
 }
 
 FGameplayTag UAuraAbilitySystemLibrary::FindStatusTagFromAbilityInfo(const UObject* WorldContextObject,
 	const FGameplayTag& AbilityTag)
 {
-	const AAuraGameStateBase* AuraGameState = Cast<AAuraGameStateBase>(UGameplayStatics::GetGameState(WorldContextObject));
-	if (AuraGameState == nullptr) return FGameplayTag();
-	auto AbilityInfo = AuraGameState->AbilityInfo;
-	
+	UAbilityInfo* AbilityInfo = GetAbilityInfo(WorldContextObject);
+	if (AbilityInfo == nullptr) return FGameplayTag();
 	return AbilityInfo->GetAbilityInfo(AbilityTag).StatusTag;
-
 }
 
 void UAuraAbilitySystemLibrary::InitializeEnemyAttributes(const UObject* WorldContextObject, ECharacterClass CharacterClass, float Level, UAbilitySystemComponent* ASC)
@@ -183,14 +195,25 @@ FGameplayEffectContextHandle UAuraAbilitySystemLibrary::ApplyDamageEffect(FAuraD
 TArray<FRotator> UAuraAbilitySystemLibrary::GetEvenlyScacedRotators(const FVector& Forward, const FVector& Axis,
 	float Spread, int NumProjectiles)
 {
+	TArray<FRotator> Ret;
+	// A single projectile flies straight at the target — the old math returned
+	// LeftOfSpread for i=0, so a level-1 bolt veered off by Spread/2
+	if (NumProjectiles <= 1)
+	{
+		Ret.Add(Forward.Rotation());
+		return Ret;
+	}
+
+	// Step by Spread/(N-1) so the first and last rotators sit exactly on both edges
+	// of the spread (the old Spread/N step compressed and skewed the fan)
 	const FVector LeftOfSpread = Forward.RotateAngleAxis(-Spread / 2.f, Axis);
-	TArray<FRotator> Ret = TArray<FRotator>();
-	Ret.SetNum(NumProjectiles);
+	const float DeltaSpread = Spread / (NumProjectiles - 1);
+	Ret.Reserve(NumProjectiles);
 	for (int i = 0; i < NumProjectiles; ++i)
 	{
-		Ret[i] = LeftOfSpread.RotateAngleAxis(Spread * i / NumProjectiles, Axis).Rotation();
+		Ret.Add(LeftOfSpread.RotateAngleAxis(DeltaSpread * i, Axis).Rotation());
 	}
-	
+
 	return Ret;
 }
 
@@ -231,10 +254,31 @@ UCharacterClassInfo* UAuraAbilitySystemLibrary::GetCharacterClassInfo(const UObj
 
 UAbilityInfo* UAuraAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContextObject)
 {
-	const AAuraGameStateBase* AuraGameState = Cast<AAuraGameStateBase>(UGameplayStatics::GetGameState(WorldContextObject));
-	if (AuraGameState == nullptr) return nullptr;
-	auto AbilityInfo = AuraGameState->AbilityInfo;
-	return AbilityInfo;
+	if (const AAuraGameStateBase* AuraGameState = Cast<AAuraGameStateBase>(UGameplayStatics::GetGameState(WorldContextObject)))
+	{
+		return AuraGameState->AbilityInfo;
+	}
+
+	// The GameState is a replicated actor, and on a client the ASC's ActivatableAbilities
+	// OnRep can beat its arrival: UWorld::GetGameState() is still null when the widget
+	// controllers ask for ability info, so the one-shot BroadcastAbilityInfo is lost and
+	// the client's spell globes stay empty (NetMode=3, GameState=None).
+	// AbilityInfo is static config that lives on the GameState *class default*, so fall
+	// back to the CDO of the GameState class the level's GameMode declares - that is
+	// available on every machine from level load, before any replication happens.
+	const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull);
+	if (World == nullptr) return nullptr;
+
+	const AWorldSettings* WorldSettings = World->GetWorldSettings();
+	// Null when the map inherits the project's GlobalDefaultGameMode instead of setting
+	// a GameMode Override; every Aura map sets one in World Settings.
+	if (WorldSettings == nullptr || !WorldSettings->DefaultGameMode) return nullptr;
+
+	const AGameModeBase* GameModeCDO = WorldSettings->DefaultGameMode->GetDefaultObject<AGameModeBase>();
+	if (GameModeCDO == nullptr || !GameModeCDO->GameStateClass) return nullptr;
+
+	const AAuraGameStateBase* GameStateCDO = Cast<AAuraGameStateBase>(GameModeCDO->GameStateClass->GetDefaultObject());
+	return GameStateCDO ? GameStateCDO->AbilityInfo : nullptr;
 }
 
 bool UAuraAbilitySystemLibrary::IsBlockedHit(const FGameplayEffectContextHandle& EffectContextHandle)
@@ -399,10 +443,12 @@ void UAuraAbilitySystemLibrary::GetLivePlayersWithinRadius(const UObject* WorldC
 
 	const AActor* SourceActor = Cast<AActor>(WorldContextObject);
 	AActor* MutableSourceActor = const_cast<AActor*>(SourceActor);
-
+	
 	// query scene to see what we hit
 	if (const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
 	{
+		//DrawDebugSphere(World, SphereOrigin, Radius, 16, FColor::Green, false, 3.f, 0, 1.f);
+
 		TArray<FOverlapResult> Overlaps;
 		World->OverlapMultiByObjectType(Overlaps, SphereOrigin, FQuat::Identity, 
 			FCollisionObjectQueryParams(FCollisionObjectQueryParams::InitType::AllDynamicObjects), 
@@ -423,6 +469,7 @@ void UAuraAbilitySystemLibrary::GetLivePlayersWithinRadius(const UObject* WorldC
 
 bool UAuraAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActor)
 {
+	if (!IsValid(FirstActor) || !IsValid(SecondActor)) return false;
 	const bool bFirstIsPlayer = FirstActor->ActorHasTag(FName("Player"));
 	const bool bSecondIsPlayer = SecondActor->ActorHasTag(FName("Player"));
 	const bool bFriendly = bFirstIsPlayer == bSecondIsPlayer;

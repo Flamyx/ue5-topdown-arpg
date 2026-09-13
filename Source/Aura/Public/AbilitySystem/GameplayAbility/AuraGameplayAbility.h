@@ -26,4 +26,7 @@ public:
 protected:
 	float GetManaCost(float Level) const;
 	float GetCooldown(float Level) const;
+	
+	UPROPERTY(EditAnywhere)
+	int32 MaxAbilityLevel = 25;
 };

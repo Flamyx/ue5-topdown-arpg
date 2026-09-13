@@ -3,8 +3,9 @@
 
 #include "AbilitySystem/AbilityTasks/TargetDataUnderMouse.h"
 #include "AbilitySystemComponent.h"
+#include "Aura/Aura.h"
 
-UTargetDataUnderMouse* UTargetDataUnderMouse::CreateTargetDataUnderMouse(UGameplayAbility* OwningAbility)
+ UTargetDataUnderMouse* UTargetDataUnderMouse::CreateTargetDataUnderMouse(UGameplayAbility* OwningAbility)
 {
 	UTargetDataUnderMouse* MyObj = NewAbilityTask<UTargetDataUnderMouse>(OwningAbility);
 
@@ -41,10 +42,14 @@ void UTargetDataUnderMouse::SendMouseCursorData()
 
 	auto PlayerController = Ability->GetCurrentActorInfo()->PlayerController.Get();
 	FHitResult CursorHit;
-	PlayerController->GetHitResultUnderCursor(ECC_Visibility, false, CursorHit);
-	if (!CursorHit.bBlockingHit)
-		return;
-	
+	if (PlayerController)
+	{
+		PlayerController->GetHitResultUnderCursor(ECC_Target, false, CursorHit);
+	}
+	// Always send, even without a blocking hit: returning early here leaves the
+	// server-side task in SetWaitingOnRemotePlayerData forever, so the ability never
+	// ends and its input slot stays dead. Receivers must check bBlockingHit instead.
+
 	FGameplayAbilityTargetDataHandle DataHandle;
 	FGameplayAbilityTargetData_SingleTargetHit* Data = new FGameplayAbilityTargetData_SingleTargetHit();
 	

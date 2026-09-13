@@ -104,7 +104,12 @@ public:
 	FGameplayTag Aura;
 	
 	FGameplayTag Effect_Status_Applied;
-	
+
+	FGameplayTag GameplayCue_MeleeImpact;
+	FGameplayTag GameplayCue_ShockBurst;
+	FGameplayTag GameplayCue_ShockLoop;
+	FGameplayTag GameplayCue_ShockLoop_Fork;
+
 	TMap<FGameplayTag, FGameplayTag> DamageTypesToResistances;
 	TMap<FGameplayTag, FGameplayTag> DamageTypesToDebuffs;
 

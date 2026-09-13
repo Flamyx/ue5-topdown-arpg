@@ -121,7 +121,9 @@ void UExecCalc_Damage::DetermineBaseDamage(
 		const FGameplayTag DamageTypeTag = Pair.Key;
 		const FGameplayEffectAttributeCaptureDefinition CaptureDef = TagsToCaptureDefs[ResistanceTag];
 
-		float DamageTypeValue = Spec.GetSetByCallerMagnitude(DamageTypeTag);
+		// bWarnIfFound=false: each spell only sets ONE damage type; the other
+		// lookups legitimately miss and shouldn't spam LogGameplayEffects errors
+		float DamageTypeValue = Spec.GetSetByCallerMagnitude(DamageTypeTag, false, 0.f);
 
 		float Resistance = 0.f;
 		ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(CaptureDef, EvaluationParameters, Resistance);
@@ -230,10 +232,10 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 	AActor* TargetAvatar = TargetASC ? TargetASC->GetAvatarActor() : nullptr;
 
 	int32 SourceLevel = 1;
-	if (SourceAvatar->Implements<UCombatInterface>())
+	if (IsValid(SourceAvatar) && SourceAvatar->Implements<UCombatInterface>())
 		SourceLevel = ICombatInterface::Execute_GetPlayerLevel(SourceAvatar);
 	int32 TargetLevel = 1;
-	if (TargetAvatar->Implements<UCombatInterface>())
+	if (IsValid(TargetAvatar) && TargetAvatar->Implements<UCombatInterface>())
 		TargetLevel = ICombatInterface::Execute_GetPlayerLevel(TargetAvatar);
 
 	const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();

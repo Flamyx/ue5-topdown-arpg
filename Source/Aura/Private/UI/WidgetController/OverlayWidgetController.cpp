@@ -15,6 +15,14 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	OnMaxHealthChanged.Broadcast(GetAuraAS()->GetMaxHealth());
 	OnManaChanged.Broadcast(GetAuraAS()->GetMana());
 	OnMaxManaChanged.Broadcast(GetAuraAS()->GetMaxMana());
+
+	// Re-push the ability icons now that the widget is bound (same as the spell menu
+	// controller does). BindCallbacksToDependencies runs inside AAuraHUD's widget
+	// controller getter - a line BEFORE SetWidgetController - so on a client, where the
+	// abilities have already replicated in and bStartupAbilitiesGiven is true, its
+	// immediate BroadcastAbilityInfo() reaches no listeners and the globes stay empty.
+	// No-op on the server, where the abilities are granted after the overlay is built.
+	BroadcastAbilityInfo();
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()

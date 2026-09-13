@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemGlobals.h"
+#include "GameFramework/Character.h"
 
 UAuraDamageGameplayAbility::UAuraDamageGameplayAbility()
 {
@@ -13,15 +14,13 @@ UAuraDamageGameplayAbility::UAuraDamageGameplayAbility()
 
 void UAuraDamageGameplayAbility::CauseDamage(AActor* TargetActor)
 {
-	FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(DamageEffectClass, 1);
+	FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(DamageEffectClass, GetAbilityLevel());
 	FGameplayEffectSpec* Spec = SpecHandle.Data.Get();
-	if (Spec)
-	{
-		Spec->SetSetByCallerMagnitude(DamageType, Damage.GetValueAtLevel(GetAbilityLevel()));
+	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (Spec == nullptr || TargetASC == nullptr) return;
 
-	}
-	GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(*Spec,
-												UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor));
+	Spec->SetSetByCallerMagnitude(DamageType, Damage.GetValueAtLevel(GetAbilityLevel()));
+	GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(*Spec, TargetASC);
 }
 
 FAuraDamageEffectParams UAuraDamageGameplayAbility::MakeDamageEffectParamsFromClassDefaults(AActor* TargetActor) const
@@ -55,4 +54,10 @@ FAuraDamageEffectParams UAuraDamageGameplayAbility::MakeDamageEffectParamsFromCl
 	}
 	
 	return DamageEffectParams;
+}
+
+void UAuraDamageGameplayAbility::StoreOwnerVariables()
+{
+	OwnerPlayerController = GetCurrentActorInfo()->PlayerController.Get();
+	OwnerCharacter = Cast<ACharacter>(CurrentActorInfo->AvatarActor);
 }

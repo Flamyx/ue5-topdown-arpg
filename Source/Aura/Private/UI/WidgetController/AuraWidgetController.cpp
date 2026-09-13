@@ -7,6 +7,8 @@
 #include "AbilitySystem/AuraAbilitySystemComponent.h"
 #include "Player/AuraPlayerState.h"
 #include "Player/AuraPlayerController.h"
+#include "Engine/World.h"
+#include "GameFramework/GameStateBase.h"
 
 void UAuraWidgetController::SetWidgetControllerParams(const FWidgetControllerParams& WCParams)
 {
@@ -76,6 +78,12 @@ void UAuraWidgetController:: BroadcastAbilityInfo()
 			auto AbilityInfo = UAuraAbilitySystemLibrary::GetAbilityInfo(GetAuraPS());
 			if (!AbilityInfo)
 			{
+				const UWorld* World = GetWorld();
+				UE_LOG(LogTemp, Warning, TEXT("No Ability Info Found | NetMode=%d | PS=%s | World=%s | GameState=%s"),
+					World ? (int32)World->GetNetMode() : -1,
+					*GetNameSafe(GetAuraPS()),
+					*GetNameSafe(World),
+					*GetNameSafe(World ? World->GetGameState() : nullptr));
 				GEngine->AddOnScreenDebugMessage(-1, 150, FColor::Red, "No Ability Info Found");
 			}
 			else

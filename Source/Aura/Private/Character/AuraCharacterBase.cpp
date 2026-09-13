@@ -9,6 +9,7 @@
 #include "AbilitySystem/AuraAbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 
 // Sets default values
@@ -94,6 +95,15 @@ void AAuraCharacterBase::MulticastHandleDeath_Implementation(const FVector& Deat
 	
 }
 
+void AAuraCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	// SkipOwner: the owning client writes this every AbilityTick from its own, locally fresh
+	// cursor. Replicating the server's copy back would stomp that with a value ~1 tick
+	// older and make the beam end jitter between the two. Everyone else gets the server's.
+	DOREPLIFETIME_CONDITION(AAuraCharacterBase, BeamEndLocation, COND_SkipOwner);
+}
+
 // Called when the game starts or when spawned
 void AAuraCharacterBase::BeginPlay()
 {
@@ -131,12 +141,12 @@ ECharacterClass AAuraCharacterBase::GetCharacterClass_Implementation()
 	return CharacterClass;
 }
 
-FOnASCRegistered AAuraCharacterBase::GetOnASCRegisteredDelegate()
+FOnASCRegistered& AAuraCharacterBase::GetOnASCRegisteredDelegate()
 {
 	return OnASCRegisteredDelegate;
 }
 
-FOnDeath AAuraCharacterBase::GetOnDeathDelegate()
+FOnDeath& AAuraCharacterBase::GetOnDeathDelegate()
 {
 	return OnDeathDelegate;
 }

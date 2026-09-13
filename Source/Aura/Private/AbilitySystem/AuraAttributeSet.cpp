@@ -142,7 +142,7 @@ void UAuraAttributeSet::HandleIncomingXP(const FEffectProperties& Props)
 	const float XPReward = GetIncomingXP();
 	SetIncomingXP(0.f);
 
-	if (Props.SourceCharacter->Implements<UCombatInterface>() && Props.SourceCharacter->Implements<UPlayerInterface>())
+	if (IsValid(Props.SourceCharacter) && Props.SourceCharacter->Implements<UCombatInterface>() && Props.SourceCharacter->Implements<UPlayerInterface>())
 	{
 		int32 CurrentXP = IPlayerInterface::Execute_GetXP(Props.SourceCharacter);
 		int32 CurrentLevel = ICombatInterface::Execute_GetPlayerLevel(Props.SourceCharacter);
@@ -228,7 +228,7 @@ void UAuraAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 	FEffectProperties Props;
 	SetEffectProperties(Data, Props);
 	
-	if (Props.TargetCharacter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Props.TargetCharacter)) return;
+	if (IsValid(Props.TargetCharacter) && Props.TargetCharacter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Props.TargetCharacter)) return;
 	
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
@@ -254,9 +254,10 @@ void UAuraAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 void UAuraAttributeSet::ShowFloatingText(const FEffectProperties& Props, float Damage, bool bBlockedHit, bool bCriticalHit) const
 {
+	if (!IsValid(Props.TargetCharacter)) return;
 	if (Props.SourceCharacter != Props.TargetCharacter)
 	{
-		if (AAuraPlayerController* PC = Cast<AAuraPlayerController>(Props.SourceCharacter->Controller))
+		if (AAuraPlayerController* PC = IsValid(Props.SourceCharacter) ? Cast<AAuraPlayerController>(Props.SourceCharacter->Controller) : nullptr)
 		{
 			PC->ShowDamageNumber(Damage, Props.TargetCharacter, bBlockedHit, bCriticalHit);
 			return;

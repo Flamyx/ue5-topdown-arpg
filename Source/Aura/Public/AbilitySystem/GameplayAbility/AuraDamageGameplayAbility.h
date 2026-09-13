@@ -23,6 +23,9 @@ public:
 	UFUNCTION(BlueprintPure)
 	FAuraDamageEffectParams MakeDamageEffectParamsFromClassDefaults(AActor* TargetActor = nullptr) const;
 	
+	UFUNCTION(BlueprintCallable)
+	void StoreOwnerVariables();
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage")
 	FGameplayTag DamageType;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage")
@@ -51,4 +54,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<UGameplayEffect> ResidualDamageEffectClass;
+	
+	UPROPERTY(BlueprintReadWrite)
+	TObjectPtr<ACharacter> OwnerCharacter;
+	
+	UPROPERTY(BlueprintReadWrite)
+	TObjectPtr<APlayerController> OwnerPlayerController;
 };

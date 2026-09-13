@@ -64,7 +64,7 @@ public:
 	float GetDebuffDamage() const { return DebuffDamage; }
 	float GetDebuffDuration() const { return DebuffDuration; }
 	float GetDebuffFrequency() const { return DebuffFrequency; }
-	FGameplayTag GetDamageType() const { return *DamageType; }
+	FGameplayTag GetDamageType() const { return DamageType.IsValid() ? *DamageType : FGameplayTag(); }
 	FVector GetDeathImpulse() const { return DeathImpulse; }
 	FVector GetKnockbackImpulse() const { return KnockbackImpulse; }
 

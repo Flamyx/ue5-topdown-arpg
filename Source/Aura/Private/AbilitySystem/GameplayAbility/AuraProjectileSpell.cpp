@@ -32,8 +32,10 @@ void UAuraProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocati
 	SpawnTransform.SetLocation(SocketLocation);
 	SpawnTransform.SetRotation(Rotation.Quaternion());
 
+	// Instigator must be the avatar pawn — it replicates, and clients use it for
+	// the friend/self checks in OnOverlap (the owning actor is the PlayerState)
 	AAuraProjectile* Projectile = GetWorld()->SpawnActorDeferred<AAuraProjectile>(ProjectileClass, SpawnTransform,
-		GetOwningActorFromActorInfo(), Cast<APawn>(GetOwningActorFromActorInfo()),
+		GetOwningActorFromActorInfo(), Cast<APawn>(GetAvatarActorFromActorInfo()),
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	
 	Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();

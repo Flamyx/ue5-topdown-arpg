@@ -33,8 +33,8 @@ public:
 	virtual int32 GetMinionLimit_Implementation() override { return MinionLimit; };
 	virtual void UpdateMinionCount_Implementation(int32 AddVal) override { MinionCount += AddVal; };
 	virtual ECharacterClass GetCharacterClass_Implementation() override;
-	virtual FOnASCRegistered GetOnASCRegisteredDelegate() override;
-	virtual FOnDeath GetOnDeathDelegate() override;
+	virtual FOnASCRegistered& GetOnASCRegisteredDelegate() override;
+	virtual FOnDeath& GetOnDeathDelegate() override;
 	virtual USkeletalMeshComponent* GetWeapon_Implementation() override;
 	/* End Combat Interface */
 
@@ -45,6 +45,14 @@ public:
 	
 	FOnASCRegistered OnASCRegisteredDelegate;
 	FOnDeath OnDeathDelegate;
+	
+	UPROPERTY(Replicated) 
+	FVector_NetQuantize BeamEndLocation;
+	
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	FVector GetBeamEndLocation() const { return BeamEndLocation; }
+	
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
 	// Called when the game starts or when spawned
