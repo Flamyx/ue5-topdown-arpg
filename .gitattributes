@@ -1,0 +1,5 @@
+# Unreal binary assets can't be diffed or merged: store them in Git LFS so every
+# saved revision doesn't bloat the Git history. Not `lockable` - that makes files
+# read-only until locked, which blocks saving in the editor for a solo workflow.
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap   filter=lfs diff=lfs merge=lfs -text

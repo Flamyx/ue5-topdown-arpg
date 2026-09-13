@@ -3,7 +3,21 @@ DerivedDataCache
 Intermediate
 Saved
 Build
-Content
+
+# Content: version only what we author (via LFS, see .gitattributes). Marketplace
+# packs and course art (~12 GB) are backed up separately, not versioned.
+# The pattern ignores what's INSIDE Content rather than Content itself - git can't
+# re-include a path whose parent directory is ignored.
+/Content/*
+!/Content/Blueprints/
+!/Content/Maps/
+!/Content/DesertCanyon/
+# World Partition one-file-per-actor data for our maps; DesertCity is not ours to keep
+!/Content/__ExternalActors__/
+!/Content/__ExternalObjects__/
+/Content/__ExternalActors__/DesertCity/
+/Content/__ExternalObjects__/DesertCity/
+
 **/BlackAlder
 **/Landscape
 **/MedievalDungeon
