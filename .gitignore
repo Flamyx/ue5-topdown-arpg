@@ -11,6 +11,12 @@ Content
 **/StarterContent
 **/Assets
 
+# Third-party marketplace plugins (installed per machine, not our source)
+Plugins/Marketplace/
+
+# Doc screenshots - keep the markdown, not the multi-MB captures
+Docs/Images/
+
 .vscode
 .vs
 .idea
@@ -19,6 +25,7 @@ Content
 *.opendb
 *.sdf
 *.sln
+*.slnx
 *.suo
 *.xcodeproj
 *.xcworkspace
