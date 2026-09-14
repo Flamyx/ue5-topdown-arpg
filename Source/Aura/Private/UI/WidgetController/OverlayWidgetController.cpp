@@ -59,9 +59,10 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 
 	if (GetAuraASC())
 	{
-		if (!AuraASC->bStartupAbilitiesGiven)
-			AuraASC->AbilitiesGiven.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
-		else
+		// Always bind: on a client AbilitiesGiven fires on every replicated ability change, so the
+		// globes follow later reps even when the first one landed before this controller existed
+		AuraASC->AbilitiesGiven.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
+		if (AuraASC->bStartupAbilitiesGiven)
 			BroadcastAbilityInfo();
 
 		AuraASC->EffectAssetTags.AddLambda(

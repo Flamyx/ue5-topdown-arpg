@@ -7,6 +7,8 @@
 #include "AbilitySystem/AuraAbilitySystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "AbilitySystemComponent.h"
+#include "NiagaraComponent.h"
+#include "Net/UnrealNetwork.h"
 
 
 AMeteoriteProjectile::AMeteoriteProjectile()
@@ -21,10 +23,10 @@ AMeteoriteProjectile::AMeteoriteProjectile()
 	ProjectileMovement->ProjectileGravityScale = 0.f;
 }
 
-void AMeteoriteProjectile::SetSphereRadius(float ChargeRatio)
+void AMeteoriteProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	BlastRadius = FMath::Lerp(BlastRadius, MaxBlastRadius, ChargeRatio);
-	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue, FString::SanitizeFloat(BlastRadius, 2));
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AMeteoriteProjectile, ChargeRatio);
 }
 
 void AMeteoriteProjectile::BeginPlay()
@@ -35,6 +37,18 @@ void AMeteoriteProjectile::BeginPlay()
 	// override - binding "OnOverlap" a second time is a duplicate and trips the
 	// InvocationList[CurFunctionIndex] != InDelegate ensure in ScriptDelegates.h.
 	Super::BeginPlay();
+
+	// Runs identically on every machine: ChargeRatio was set before FinishSpawning, so it is
+	// already in place on the server and arrives with the initial replication on clients.
+	// (Computed once - the old SetSphereRadius lerped BlastRadius into itself and compounded.)
+	BaseBlastRadius = BlastRadius;
+	BlastRadius = FMath::Lerp(BaseBlastRadius, MaxBlastRadius, ChargeRatio);
+
+	// The meteor visual is a Niagara component added in the Blueprint, not a C++ member
+	if (UNiagaraComponent* MeteorFX = FindComponentByClass<UNiagaraComponent>())
+	{
+		MeteorFX->SetRelativeScale3D(MeteorFX->GetRelativeScale3D() * GetChargeScale());
+	}
 }
 
 void AMeteoriteProjectile::Destroyed()

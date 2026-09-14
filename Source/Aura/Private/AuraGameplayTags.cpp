@@ -210,12 +210,10 @@ void FAuraGameplayTags::InitializeNativeGameplayTags()
 	);
 	
 
-	/*
-	Map of Damage types to Resistances
-	*/
-	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Fire, GameplayTags.Debuff_Burn);
-	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Lightning, GameplayTags.Debuff_Stun);
-	
+	// (Debuffs are no longer derived from damage type - each ability lists its own
+	// FAuraDebuffSpec entries. Debuff.Chance/Duration/Frequency/Damage stay registered
+	// as tags but are no longer used as SetByCaller magnitudes.)
+
 	/*
 	Effects
 	*/
@@ -325,8 +323,8 @@ void FAuraGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	GameplayTags.Cooldown_Lightning_Electrocute = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Cooldown.Lightning.Electrocute "),
-		FString("Electrocute  Ability Cooldown Tag")
+		FName("Cooldown.Lightning.Electrocute"),
+		FString("Electrocute Ability Cooldown Tag")
 	);
 
 	/*

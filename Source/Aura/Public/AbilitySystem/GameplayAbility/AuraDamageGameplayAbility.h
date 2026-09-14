@@ -31,14 +31,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage")
 	FScalableFloat Damage;
 	
-	UPROPERTY(EditDefaultsOnly, Category = "Damage")
-	float DebuffChance = 0.f;
-	UPROPERTY(EditDefaultsOnly, Category = "Damage")
-	float DebuffDamage = 5.f;
-	UPROPERTY(EditDefaultsOnly, Category = "Damage")
-	float DebuffFrequency = 1.f;
-	UPROPERTY(EditDefaultsOnly, Category = "Damage")
-	float DebuffDuration = 4.f;
+	/** Debuffs this ability can apply on hit. Each is rolled independently against the target's
+	 *  resistance to DamageType; a landed Debuff.Stun is also what plays the target's HitReact. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage")
+	TArray<FAuraDebuffSpec> Debuffs;
 	UPROPERTY(EditDefaultsOnly, Category = "Death")
 	float DeathImpulseMagnitude = 1.2f;
 	UPROPERTY(EditDefaultsOnly, Category = "Knockback")

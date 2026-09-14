@@ -68,40 +68,40 @@ void UExecCalc_Damage::DetermineDebuff(
 	FAggregatorEvaluateParameters& EvaluationParameters,
 	const TMap<FGameplayTag, FGameplayEffectAttributeCaptureDefinition>& TagsToCaptureDefs) const
 {
-	auto AuraTags = FAuraGameplayTags::Get();
-	
-	// Debuff
-	for (auto Pair : AuraTags.DamageTypesToDebuffs)
+	FGameplayEffectContextHandle ContextHandle = Spec.GetContext();
+	FAuraGameplayEffectContext* AuraContext = FAuraGameplayEffectContext::ExtractEffectContext(ContextHandle);
+	if (AuraContext == nullptr) return;
+
+	const FAuraGameplayTags& AuraTags = FAuraGameplayTags::Get();
+
+	// Debuffs are declared per ability (FAuraDebuffSpec) rather than derived from the damage
+	// type, and every one is resisted by the resistance of the damage type this hit carries:
+	// a Fire hit's Stun is resisted by Fire resistance.
+	for (const auto& Pair : AuraTags.DamageTypesToResistances)
 	{
-		const FGameplayTag DamageType = Pair.Key;
-		const FGameplayTag DebuffType = Pair.Value;
-		const float TypeDamage = Spec.GetSetByCallerMagnitude(DamageType, false, -1.f);
-		if (TypeDamage > -.5f)
+		const FGameplayTag& DamageType = Pair.Key;
+		if (Spec.GetSetByCallerMagnitude(DamageType, false, -1.f) <= -.5f) continue;
+
+		UAuraAbilitySystemLibrary::SetDamageType(ContextHandle, DamageType);
+
+		const FGameplayTag& ResistanceTag = Pair.Value;
+		checkf(TagsToCaptureDefs.Contains(ResistanceTag),
+			TEXT("TagsToCaptureDefs doesn't contain Tag: [%s] in ExecCalc_Damage"), *ResistanceTag.ToString());
+		float TargetResistance = 0.f;
+		ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(TagsToCaptureDefs[ResistanceTag], EvaluationParameters, TargetResistance);
+
+		for (const FAuraDebuffSpec& Debuff : AuraContext->GetPendingDebuffs())
 		{
-			const FGameplayTag& ResistanceTag = AuraTags.DamageTypesToResistances[DamageType];
-			checkf(TagsToCaptureDefs.Contains(ResistanceTag),
-				TEXT("TagsToCaptureDefs doesn't contain Tag: [%s] in ExecCalc_Damage"), *ResistanceTag.ToString());
-			const FGameplayEffectAttributeCaptureDefinition CaptureDef= TagsToCaptureDefs[ResistanceTag];
-			float TargetDebuffResistance = 0.f;
-			ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(CaptureDef, EvaluationParameters, TargetDebuffResistance);
-			
-			float DebuffChance = Spec.GetSetByCallerMagnitude(AuraTags.Debuff_Chance, false, -1.f);
-			DebuffChance = DebuffChance > 0.f ? DebuffChance * (100.f - TargetDebuffResistance) / 100.f : 0.f;
-			
-			if (DebuffChance > FMath::RandRange(1, 100))
+			const float Chance = Debuff.Chance * (100.f - TargetResistance) / 100.f;
+			// >= against a [0,100) roll: Chance 100 really means always, 0 never
+			if (Chance > 0.f && Chance >= FMath::FRandRange(0.f, 100.f))
 			{
-				auto ContextHandle = Spec.GetContext();
-				float DebuffDuration = Spec.GetSetByCallerMagnitude(AuraTags.Debuff_Duration);
-				float DebuffFrequency = Spec.GetSetByCallerMagnitude(AuraTags.Debuff_Frequency);
-				float DebuffDamage = Spec.GetSetByCallerMagnitude(AuraTags.Debuff_Damage);
-				UAuraAbilitySystemLibrary::SetIsSuccessfulDebuff(ContextHandle, true);
-				UAuraAbilitySystemLibrary::SetDebuffDuration(ContextHandle, DebuffDuration);
-				UAuraAbilitySystemLibrary::SetDebuffDamage(ContextHandle, DebuffDamage);
-				UAuraAbilitySystemLibrary::SetDebuffFrequency(ContextHandle, DebuffFrequency);
-				UAuraAbilitySystemLibrary::SetDamageType(ContextHandle, DamageType);
-				//Now in AttributeSet can handle debuff
+				AuraContext->AddSuccessfulDebuff(Debuff);
 			}
 		}
+
+		// Each spell carries one damage type - stop so the same debuffs aren't rolled twice
+		break;
 	}
 }
 

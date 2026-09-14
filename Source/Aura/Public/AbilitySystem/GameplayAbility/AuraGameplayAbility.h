@@ -22,7 +22,10 @@ public:
 	virtual FString GetDescription(int32 Level, float Damage, const FString& Title);
 	virtual FString GetNextLevelDescription(int32 Level, float Damage);
 	virtual FString GetLockedDescription(int32 Level);
-	
+
+	/** Read by UMMC_ManaCost when the cost GE is checked or applied. 1 = the cost GE's base cost. */
+	virtual float GetManaCostMultiplier() const { return 1.f; }
+
 protected:
 	float GetManaCost(float Level) const;
 	float GetCooldown(float Level) const;

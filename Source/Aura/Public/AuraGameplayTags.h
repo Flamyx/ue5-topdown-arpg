@@ -111,7 +111,6 @@ public:
 	FGameplayTag GameplayCue_ShockLoop_Fork;
 
 	TMap<FGameplayTag, FGameplayTag> DamageTypesToResistances;
-	TMap<FGameplayTag, FGameplayTag> DamageTypesToDebuffs;
 
 private:
 	static FAuraGameplayTags GameplayTags;

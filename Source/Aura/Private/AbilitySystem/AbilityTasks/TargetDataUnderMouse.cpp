@@ -66,13 +66,28 @@ void UTargetDataUnderMouse::SendMouseCursorData()
 	{
 		ValidData.Broadcast(DataHandle);
 	}
+	EndTask();   // one sample per task, see OnTargetDataReplicatedCallback
 }
 
 void UTargetDataUnderMouse::OnTargetDataReplicatedCallback(const FGameplayAbilityTargetDataHandle& DataHandle, FGameplayTag ActivationTag)
 {
+	// One sample per task. The target-data delegate is keyed by the ACTIVATION, not by the task,
+	// so a server task that stays bound fires again for every later sample of the same activation -
+	// including the channel aim loop's 20 per second. For the Blueprint's activation-time task that
+	// re-ran its whole ValidData chain: replaying the cast montage interrupted the previous
+	// PlayMontageAndWait (Meteorite: OnInterrupted -> EndAbility), and Electrocute re-committed and
+	// restarted its damage timer on every sample. Listen-server hosts never bind, so only clients saw it.
+	//
+	// Copy BEFORE consuming. When the sample was cached before this task existed, DataHandle is a
+	// reference into the ASC's cache (CallReplicatedTargetDataDelegatesIfSet), and consuming clears
+	// it - the broadcast then carried an empty handle, i.e. a hit with bBlockingHit=false. The copy
+	// shares the target data's pointers, so it survives the clear.
+	const FGameplayAbilityTargetDataHandle Data = DataHandle;
+	AbilitySystemComponent->AbilityTargetDataSetDelegate(GetAbilitySpecHandle(), GetActivationPredictionKey()).RemoveAll(this);
 	AbilitySystemComponent->ConsumeClientReplicatedTargetData(GetAbilitySpecHandle(), GetActivationPredictionKey());
 	if (ShouldBroadcastAbilityTaskDelegates())
 	{
-		ValidData.Broadcast(DataHandle);
+		ValidData.Broadcast(Data);
 	}
+	EndTask();
 }

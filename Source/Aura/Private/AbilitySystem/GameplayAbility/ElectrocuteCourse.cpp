@@ -3,17 +3,14 @@
 
 #include "AbilitySystem/GameplayAbility/ElectrocuteCourse.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AuraGameplayTags.h"
-#include "DrawDebugHelpers.h"
 #include "AbilitySystem/AuraAbilitySystemLibrary.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Character.h"
 #include "Interaction/CombatInterface.h"
-#include "Kismet/KismetSystemLibrary.h"
-#include "AbilitySystem/AbilityTasks/TargetDataUnderMouse.h"
-#include "Character/AuraCharacter.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Interaction/EnemyInterface.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 namespace
 {
@@ -191,7 +188,7 @@ void UElectrocuteCourse::AffectActors()
 		// Must pass CueParams - the tag-only overload builds fresh params from an empty
 		// effect context, leaving GC_ShockLoop with a null TargetAttachComponent.
 		// Fork tag: the cue reads this fork actor's location as the beam end, whereas the
-		// caster's beam (GameplayCue.ShockLoop) reads the caster's BeamEndLocation.
+		// caster's beam (GameplayCue.ShockLoop) reads the caster's smoothed aim point.
 		TargetASC->AddGameplayCue(FAuraGameplayTags::Get().GameplayCue_ShockLoop_Fork, CueParams);
 		AffectedActors.Add(Actors[i]);
 	}
@@ -237,44 +234,48 @@ void UElectrocuteCourse::DamageActors()
 	}
 }
 
-void UElectrocuteCourse::AbilityTick()
+void UElectrocuteCourse::OnAimUpdated(const FHitResult& Hit)
 {
-	RequestCursorTarget();
-	if (AAuraCharacterBase* Caster = Cast<AAuraCharacterBase>(GetAvatarActorFromActorInfo()))
+	// The cursor hit is intent; the trace from the weapon socket snaps to whatever is actually
+	// first on the beam's path. The parent pushes the refined MouseHitLocation to the caster.
+	TraceFirstTarget(MouseHitLocation);
+}
+
+int32 UElectrocuteCourse::GetBeamCount() const
+{
+	if (!IsValid(BoundPrimary)) return 0;
+	int32 Count = 1;
+	for (const AActor* Affected : AffectedActors)
 	{
-		Caster->BeamEndLocation = MouseHitLocation;
+		if (IsValid(Affected)) ++Count;
+	}
+	return Count;
+}
+
+float UElectrocuteCourse::GetManaCostMultiplier() const
+{
+	return BeamManaCostMultiplier.GetValueAtLevel(GetBeamCount());
+}
+
+void UElectrocuteCourse::DamageTick()
+{
+	// Refresh the forks first so this tick is paid for the beams it actually fires
+	AffectActors();
+
+	// Authority only: the client's forks are always empty (AffectActors is server-side), and a cost
+	// predicted from a timer has no fresh prediction key. The server's Mana change replicates.
+	if (HasAuthority(&CurrentActivationInfo)
+		&& !CommitAbilityCost(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+	{
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);   // out of mana
+		return;
 	}
 
-	// No target: the beam keeps rendering toward BeamEndLocation, there is simply nothing
-	// to fork from or damage. UnbindPrimary already dropped the fork cues.
+	// No target: the beam keeps rendering toward the aim point, there is simply nothing to fork
+	// from or damage. UnbindPrimary already dropped the fork cues.
 	if (!IsValid(BoundPrimary)) return;
 
-	AffectActors();
 	DamageActors();
-}
-
-void UElectrocuteCourse::RequestCursorTarget()
-{
-	if (!IsActive()) return;
-
-	if (TargetDataTask)                  // never leave the previous one running
-	{
-		TargetDataTask->EndTask();
-		TargetDataTask = nullptr;
-	}
-
-	TargetDataTask = UTargetDataUnderMouse::CreateTargetDataUnderMouse(this);
-	TargetDataTask->ValidData.AddDynamic(this, &UElectrocuteCourse::OnTargetDataReceived);
-	TargetDataTask->ReadyForActivation();   // <- without this, Activate() never runs
-}
-
-void UElectrocuteCourse::OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data)
-{
-	const FHitResult Hit = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(Data, 0);
-	if (!Hit.bBlockingHit) return;          // the task always sends, hit or miss
-	MouseHitLocation = Hit.ImpactPoint;
-	MouseHitActor = Hit.GetActor();
-	TraceFirstTarget(MouseHitLocation);
 }
 
 void UElectrocuteCourse::RunDamageLogic()
@@ -285,19 +286,14 @@ void UElectrocuteCourse::RunDamageLogic()
 	// Seed the grace window, or the first tick without a target is already past it
 	LastValidTargetTime = World->GetTimeSeconds();
 
-	// Seed the beam end BEFORE adding the cue. The looping timer first fires after one full
-	// FChargeTick, so AbilityTick doesn't write BeamEndLocation for that long - but the
-	// cue's tick starts reading it on the very next frame, and would get (0,0,0) on a first
-	// cast or wherever the previous cast's beam ended.
-	if (AAuraCharacterBase* Caster = Cast<AAuraCharacterBase>(GetAvatarActorFromActorInfo()))
-	{
-		Caster->BeamEndLocation = MouseHitLocation;
-	}
+	// Channel lock + aim loop. Must precede the cue: it seeds the caster's aim point, which the
+	// cue's tick starts reading on the very next frame (otherwise (0,0,0) or last cast's end).
+	StartChannel();
 
-	// ONE beam cue, hosted on the CASTER for the whole channel. Its endpoint comes from the
-	// replicated BeamEndLocation, so sweeping between enemies - or onto bare floor, which
-	// has no ASC to host a cue on at all - moves the beam instead of destroying it and
-	// respawning it (which restarts the Niagara system and sfx_ShockLoop every switch).
+	// ONE beam cue, hosted on the CASTER for the whole channel. Its endpoint is the caster's
+	// smoothed aim point, so sweeping between enemies - or onto bare floor, which has no ASC
+	// to host a cue on at all - moves the beam instead of destroying and respawning it (which
+	// would restart the Niagara system and sfx_ShockLoop on every switch).
 	if (UAbilitySystemComponent* OwnASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		FGameplayCueParameters CueParams = FGameplayCueParameters();
@@ -307,7 +303,8 @@ void UElectrocuteCourse::RunDamageLogic()
 		OwnASC->AddGameplayCue(FAuraGameplayTags::Get().GameplayCue_ShockLoop, CueParams);
 	}
 
-	World->GetTimerManager().SetTimer(ChargeTimerHandle, this, &UElectrocuteCourse::AbilityTick, FChargeTick, true);
+	// Damage runs on its own cadence; retargeting already happens on the parent's faster aim loop
+	World->GetTimerManager().SetTimer(ChargeTimerHandle, this, &UElectrocuteCourse::DamageTick, FChargeTick, true);
 }
 
 void UElectrocuteCourse::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -322,22 +319,8 @@ void UElectrocuteCourse::EndAbility(const FGameplayAbilitySpecHandle Handle, con
 		OwnASC->RemoveGameplayCue(FAuraGameplayTags::Get().GameplayCue_ShockLoop);
 	}
 
-	SetPrimaryTarget(nullptr);   // unbinds the death delegate and drops the fork cues
+	SetPrimaryTarget(nullptr);   // unbinds the death delegate, clears the highlight, drops fork cues
 
-	// Undo InShockLoop here rather than only in the BP's PrepToEnd: PrepToEnd runs only on
-	// input release, so a cancel/interrupt mid-channel would leave Aura in MOVE_None with
-	// the shock-loop pose on for good. Both calls are idempotent if PrepToEnd already ran.
-	if (AActor* Avatar = GetAvatarActorFromActorInfo())
-	{
-		if (Avatar->Implements<UCombatInterface>())
-		{
-			ICombatInterface::Execute_SetInShockLoop(Avatar, false);
-		}
-		if (ACharacter* AvatarCharacter = Cast<ACharacter>(Avatar))
-		{
-			AvatarCharacter->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
-		}
-	}
-
+	// Parent tears the channel down: aim loop, movement lock, shock-loop pose, caster facing
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

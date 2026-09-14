@@ -108,13 +108,11 @@ void UAuraAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		SetHealth(FMath::Clamp(NewHealth, 0, GetMaxHealth()));
 
 		const bool bFatal = NewHealth <= 0.f;
-		//FAuraGameplayEffectContext* AuraDebuffEffectContext = static_cast<FAuraGameplayEffectContext*>(Props.EffectContextHandle.Get());
 		if (!bFatal && !UAuraAbilitySystemLibrary::IsDebuffHit(Props.EffectContextHandle))
 		{
+			// Direct hits still knock back, but no longer flinch on their own: HitReact is
+			// now purely the result of a landed Stun (see the debuff loop below)
 			Knockback(Props);
-			FGameplayTagContainer TagContainer;
-			TagContainer.AddTag(FAuraGameplayTags::Get().HitReact);
-			Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
 		}
 		else if (bFatal)
 		{
@@ -130,9 +128,22 @@ void UAuraAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		const bool bBlock = UAuraAbilitySystemLibrary::IsBlockedHit(Props.EffectContextHandle);
 		const bool bCriticalHit = UAuraAbilitySystemLibrary::IsCriticalHit(Props.EffectContextHandle);
 		ShowFloatingText(Props, Damage, bBlock, bCriticalHit);
-		if (UAuraAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
+
+		// Every debuff that passed its roll in UExecCalc_Damage becomes its own effect. Skipped on
+		// a killing blow - there's nothing left to burn or stun.
+		if (!bFatal)
 		{
-			Debuff(Props);
+			const FAuraGameplayTags& Tags = FAuraGameplayTags::Get();
+			for (const FAuraDebuffSpec& Debuff : UAuraAbilitySystemLibrary::GetSuccessfulDebuffs(Props.EffectContextHandle))
+			{
+				ApplyDebuff(Props, Debuff);
+				if (Debuff.DebuffTag.MatchesTagExact(Tags.Debuff_Stun))
+				{
+					FGameplayTagContainer TagContainer;
+					TagContainer.AddTag(Tags.HitReact);
+					Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+				}
+			}
 		}
 	}
 }
@@ -168,44 +179,48 @@ void UAuraAttributeSet::HandleIncomingXP(const FEffectProperties& Props)
 	}
 }
 
-void UAuraAttributeSet::Debuff(const FEffectProperties& Props)
+void UAuraAttributeSet::ApplyDebuff(const FEffectProperties& Props, const FAuraDebuffSpec& Debuff)
 {
-	auto AuraTags = FAuraGameplayTags::Get();
-	
-	const FGameplayTag DamageType = UAuraAbilitySystemLibrary::GetDamageType(Props.EffectContextHandle);
-	FString DebuffName = FString::Printf(TEXT("DynamicDebuff_%s"), *DamageType.ToString());
-	
-	UGameplayEffect* DebuffEffect = NewObject<UGameplayEffect>(GetTransientPackage(), FName(DebuffName));
-	
+	if (!Debuff.DebuffTag.IsValid() || !IsValid(Props.SourceASC) || !IsValid(Props.TargetASC)) return;
+
+	// The name must be unique. NewObject with a name that already exists in the transient
+	// package destroys and rebuilds that object in place - even while an active effect still
+	// references it - and a single Meteorite hit can land Burn and Stun in the same frame.
+	const FName DebuffName = MakeUniqueObjectName(GetTransientPackage(), UGameplayEffect::StaticClass(),
+		FName(FString::Printf(TEXT("DynamicDebuff_%s"), *Debuff.DebuffTag.ToString())));
+	UGameplayEffect* DebuffEffect = NewObject<UGameplayEffect>(GetTransientPackage(), DebuffName);
+
 	DebuffEffect->DurationPolicy = EGameplayEffectDurationType::HasDuration;
-	DebuffEffect->DurationMagnitude = FScalableFloat(UAuraAbilitySystemLibrary::GetDebuffDuration(Props.EffectContextHandle));
-	DebuffEffect->Period = UAuraAbilitySystemLibrary::GetDebuffFrequency(Props.EffectContextHandle);
+	DebuffEffect->DurationMagnitude = FScalableFloat(Debuff.Duration);
+	DebuffEffect->Period = Debuff.Frequency;
 	DebuffEffect->StackingType = EGameplayEffectStackingType::AggregateBySource;
 	DebuffEffect->StackLimitCount = 1;
-	
-	UTargetTagsGameplayEffectComponent& GrantedTagsComponent = DebuffEffect->AddComponent<UTargetTagsGameplayEffectComponent>();;
-	FInheritedTagContainer InheritedTagContainer;
-	InheritedTagContainer.AddTag(AuraTags.DamageTypesToDebuffs[DamageType]);
-	GrantedTagsComponent.SetAndApplyTargetTagChanges(InheritedTagContainer);
-	
-	FGameplayModifierInfo Mod = FGameplayModifierInfo();
-	Mod.Attribute = GetIncomingDamageAttribute();
-	Mod.ModifierOp = EGameplayModOp::Additive;
-	Mod.ModifierMagnitude = FScalableFloat(UAuraAbilitySystemLibrary::GetDebuffDamage(Props.EffectContextHandle));
-	
-	DebuffEffect->Modifiers.Add(Mod);
-	
-	auto ContextHandle = Props.SourceASC->MakeEffectContext();
-	ContextHandle.AddSourceObject(Props.SourceCharacter);
-	
-	if (FGameplayEffectSpec* MutableSpec = new FGameplayEffectSpec(DebuffEffect, ContextHandle, 1.f))
+
+	FInheritedTagContainer GrantedTags;
+	GrantedTags.AddTag(Debuff.DebuffTag);
+	DebuffEffect->AddComponent<UTargetTagsGameplayEffectComponent>().SetAndApplyTargetTagChanges(GrantedTags);
+
+	if (Debuff.Damage > 0.f)
 	{
-		FAuraGameplayEffectContext* AuraDebuffEffectContext = static_cast<FAuraGameplayEffectContext*>(ContextHandle.Get());
-		TSharedPtr<FGameplayTag> DebuffType = MakeShareable<FGameplayTag>(new FGameplayTag(DamageType));
-		AuraDebuffEffectContext->SetDamageType(DebuffType);
-		AuraDebuffEffectContext->SetIsDebuffHit(true);
-		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);
+		FGameplayModifierInfo Mod;
+		Mod.Attribute = GetIncomingDamageAttribute();
+		Mod.ModifierOp = EGameplayModOp::Additive;
+		Mod.ModifierMagnitude = FScalableFloat(Debuff.Damage);
+		DebuffEffect->Modifiers.Add(Mod);
 	}
+
+	FGameplayEffectContextHandle ContextHandle = Props.SourceASC->MakeEffectContext();
+	ContextHandle.AddSourceObject(Props.SourceCharacter);
+	if (FAuraGameplayEffectContext* DebuffContext = FAuraGameplayEffectContext::ExtractEffectContext(ContextHandle))
+	{
+		DebuffContext->SetDamageType(MakeShared<FGameplayTag>(UAuraAbilitySystemLibrary::GetDamageType(Props.EffectContextHandle)));
+		// Its periodic ticks must not knock back, and must not roll debuffs of their own
+		DebuffContext->SetIsDebuffHit(true);
+	}
+
+	// Stack-allocated: the previous `new FGameplayEffectSpec` was never freed
+	const FGameplayEffectSpec DebuffSpec(DebuffEffect, ContextHandle, 1.f);
+	Props.TargetASC->ApplyGameplayEffectSpecToSelf(DebuffSpec);
 }
 
 void UAuraAttributeSet::Knockback(const FEffectProperties& Props)

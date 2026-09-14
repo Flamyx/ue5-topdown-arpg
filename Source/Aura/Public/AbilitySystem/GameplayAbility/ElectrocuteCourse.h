@@ -3,17 +3,18 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AbilitySystem/GameplayAbility/AuraDamageGameplayAbility.h"
+#include "AbilitySystem/GameplayAbility/AuraChanneledAbility.h"
 #include "GameplayEffectTypes.h"
 #include "AbilitySystem/AuraAbilitySystemLibrary.h"
 #include "ElectrocuteCourse.generated.h"
 
-class UTargetDataUnderMouse;
 /**
- *
+ * Channelled lightning beam. UAuraChanneledAbility provides the channel lock and the cursor aim
+ * loop; this class retargets the primary on every aim sample, forks to nearby enemies, and deals
+ * damage on its own, slower tick.
  */
 UCLASS()
-class AURA_API UElectrocuteCourse : public UAuraDamageGameplayAbility
+class AURA_API UElectrocuteCourse : public UAuraChanneledAbility
 {
 	GENERATED_BODY()
 
@@ -33,28 +34,16 @@ public:
 	void SetPrimaryTarget(AActor* NewTarget);
 	void UnbindPrimary();
 
-	UFUNCTION(BlueprintCallable)
-	void AbilityTick();
-
-	UFUNCTION()   // required - ValidData is a DYNAMIC delegate
-	void OnTargetDataReceived(const FGameplayAbilityTargetDataHandle& Data);
-
-	UFUNCTION()
-	void RequestCursorTarget();
-
-	UPROPERTY()
-	TObjectPtr<UTargetDataUnderMouse> TargetDataTask;
-
 protected:
-	UPROPERTY(BlueprintReadWrite)
-	FVector MouseHitLocation;
-
-	UPROPERTY(BlueprintReadWrite)
-	TObjectPtr<AActor> MouseHitActor;
+	/** Every aim sample: refine the cursor hit into the beam's first target */
+	virtual void OnAimUpdated(const FHitResult& Hit) override;
 
 	UPROPERTY(EditDefaultsOnly)
 	float ForkRadius;
-	
+
+	// Holds the fork TARGETS, not their ASCs: the radius query returns actors, so
+	// storing actors keeps every comparison a direct pointer compare. The ASC is
+	// fetched on demand at the two places that need it (add/remove cue).
 	UPROPERTY(BlueprintReadOnly)
 	TArray<TObjectPtr<AActor>> AffectedActors;
 
@@ -67,22 +56,36 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void DamageActors();
 
+	/** Starts the channel (aim loop included), the caster-hosted beam cue and the damage tick */
 	UFUNCTION(BlueprintCallable)
 	void RunDamageLogic();
 
+	/** Seconds between damage ticks. Independent of the parent's AimTickRate. */
 	UPROPERTY(EditDefaultsOnly)
 	float FChargeTick;
-	
+
 	UPROPERTY(EditDefaultsOnly)
 	float TargetGraceSeconds;
-	
-	double LastValidTargetTime = 0.f;
+
+	double LastValidTargetTime = 0.0;
+
+	/** Mana cost multiplier by beam count (curve X = primary + forks, 0 = channeling at nothing).
+	 *  The Blueprint's CommitAbility pays the cost GE and starts the cooldown; every damage tick then
+	 *  pays the cost again (cost only), and the channel ends when it can't. */
+	UPROPERTY(EditDefaultsOnly, Category = "Cost")
+	FScalableFloat BeamManaCostMultiplier = 1.f;
+
+	virtual float GetManaCostMultiplier() const override;
+
+	/** Primary target plus live forks */
+	UFUNCTION(BlueprintPure)
+	int32 GetBeamCount() const;
 
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
-
 private:
-	FTimerHandle ChargeTimerHandle;
-
+	void DamageTick();
 	void DamageTarget(AActor* TargetActor);
+
+	FTimerHandle ChargeTimerHandle;
 };

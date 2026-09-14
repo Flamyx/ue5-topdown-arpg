@@ -37,10 +37,7 @@ FAuraDamageEffectParams UAuraDamageGameplayAbility::MakeDamageEffectParamsFromCl
 	DamageEffectParams.Damage = Damage.GetValueAtLevel(GetAbilityLevel());
 	DamageEffectParams.DamageType = DamageType;
 	
-	DamageEffectParams.DebuffChance = DebuffChance;
-	DamageEffectParams.DebuffDamage = DebuffDamage;
-	DamageEffectParams.DebuffFrequency = DebuffFrequency;
-	DamageEffectParams.DebuffDuration = DebuffDuration;
+	DamageEffectParams.Debuffs = Debuffs;
 	
 	DamageEffectParams.DeathImpulseMagnitude = DeathImpulseMagnitude;
 	DamageEffectParams.KnockbackImpulseMagnitude = KnockbackImpulseMagnitude;

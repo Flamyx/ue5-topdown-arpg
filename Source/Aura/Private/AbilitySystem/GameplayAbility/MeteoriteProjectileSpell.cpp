@@ -2,25 +2,28 @@
 
 
 #include "AbilitySystem/GameplayAbility/MeteoriteProjectileSpell.h"
-#include "AuraGameplayTags.h"
-#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "GameplayAbilitySpec.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
+#include "Engine/World.h"
 
-
-void UMeteoriteProjectileSpell::InputReleased(const FGameplayAbilitySpecHandle Handle, 
-											const FGameplayAbilityActorInfo* ActorInfo,
-											const FGameplayAbilityActivationInfo ActivationInfo)
+float UMeteoriteProjectileSpell::GetManaCostMultiplier() const
 {
-	GetWorld()->GetTimerManager().ClearTimer(ChargeTimerHandle);
+	return ChargedManaCostMultiplier.GetValueAtLevel(GetEffectiveCharge());
+}
+
+void UMeteoriteProjectileSpell::CommitExecute(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo)
+{
+	// Only reached when CommitAbility's cost and cooldown checks passed
+	Super::CommitExecute(Handle, ActorInfo, ActivationInfo);
+	bCommitted = true;
 }
 
 void UMeteoriteProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocation)
 {
 	const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
 	if (!bIsServer) return;
-	
+	if (!bCommitted) return;   // couldn't pay for this charge: the meteor fizzles
+
 	float lb = SpawnOffsetBounds[0], rb = SpawnOffsetBounds[1];
 	const FVector2d SpawnOffset = { FMath::RandRange(-lb, lb), FMath::RandRange(-rb, rb) };
 	const FVector ActorLocation = GetAvatarActorFromActorInfo()->GetActorLocation();
@@ -35,23 +38,14 @@ void UMeteoriteProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetL
 		GetOwningActorFromActorInfo(), Cast<APawn>(GetAvatarActorFromActorInfo()),
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Projectile == nullptr) return;
-	// ChargeTime comes either from the C++ ChargeTick timer (old graph) or straight
-	// from WaitInputRelease's TimeHeld (new graph) — clamp so both paths are safe
-	const float EffectiveCharge = FMath::Clamp(ChargeTime, 0.f, MaxChargeTime);
+
+	// ChargeTime comes straight from WaitInputRelease's TimeHeld; clamp to the charge window
+	const float EffectiveCharge = GetEffectiveCharge();
 	Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
 	Projectile->DamageEffectParams.Damage *= ChargedMultiplier.GetValueAtLevel(EffectiveCharge);
-	Projectile->SetSphereRadius(MaxChargeTime > 0.f ? EffectiveCharge / MaxChargeTime : 1.f);
+	// Replicated, and set before FinishSpawning so it arrives with the actor's initial state:
+	// every machine derives the same blast radius and visual scale from it in BeginPlay
+	Projectile->ChargeRatio = MaxChargeTime > 0.f ? EffectiveCharge / MaxChargeTime : 1.f;
 
 	Projectile->FinishSpawning(SpawnTransform);
-}
-
-void UMeteoriteProjectileSpell::StartChargeTimeline()
-{
-	GetWorld()->GetTimerManager().SetTimer(ChargeTimerHandle, this, &UMeteoriteProjectileSpell::ChargeTick, FChargeTick, true);
-}
-
-void UMeteoriteProjectileSpell::ChargeTick()
-{
-	ChargeTime = FMath::Clamp(ChargeTime + FChargeTick, 0.f, MaxChargeTime);
-	CircleActorTick();
 }

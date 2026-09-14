@@ -42,7 +42,10 @@ bool FAuraGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bo
 		{
 			RepBits |= 1 << 8;
 		}
-		if (bIsSuccessfulDebuff)
+		// Bit 9 used to carry the scalar debuff fields too. Those are gone (debuffs are now
+		// server-only arrays), but the damage type still replicates on this bit, so the
+		// 13-bit layout below is unchanged.
+		if (DamageType.IsValid())
 		{
 			RepBits |= 1 << 9;
 		}
@@ -114,11 +117,6 @@ bool FAuraGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bo
 	}
 	if (RepBits & (1 << 9))
 	{
-		Ar << bIsSuccessfulDebuff;
-		Ar << DebuffDuration;
-		Ar << DebuffFrequency;
-		Ar << DebuffDamage;
-
 		// Must serialize in BOTH directions — if only the reader consumes the tag
 		// the bitstream misaligns and the remote side crashes/corrupts
 		if (!DamageType.IsValid())

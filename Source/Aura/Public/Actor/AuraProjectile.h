@@ -37,6 +37,9 @@ protected:
 	void OnHit();
 	virtual void Destroyed() override;
 
+	/** Scale for ImpactEffect when it spawns on hit; subclasses scale it with their blast area. */
+	virtual FVector GetImpactEffectScale() const { return FVector(1.f); }
+
 	UFUNCTION(BlueprintCallable)
 	virtual void OnOverlap(
 		UPrimitiveComponent* OverlappedComponent,

@@ -59,7 +59,8 @@ void AAuraProjectile::OnHit()
 	                                      ImpactSound,
 	                                      GetActorLocation(),
 	                                      FRotator::ZeroRotator);
-	UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, ImpactEffect, GetActorLocation());
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, ImpactEffect, GetActorLocation(),
+		FRotator::ZeroRotator, GetImpactEffectScale());
 	if (LoopingSoundComponent)
 	{
 		LoopingSoundComponent->Stop();

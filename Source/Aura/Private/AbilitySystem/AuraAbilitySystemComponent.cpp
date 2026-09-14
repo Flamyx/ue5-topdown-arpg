@@ -308,12 +308,19 @@ bool UAuraAbilitySystemComponent::GetDescriptions(const FGameplayTag& AbilityTag
 void UAuraAbilitySystemComponent::OnRep_ActivateAbilities()
 {
 	Super::OnRep_ActivateAbilities();
-	
-	if (!bStartupAbilitiesGiven)
+
+	// Super bails out and retries itself 0.5s later while any spec's Ability hasn't resolved yet.
+	// Broadcasting then hands the UI specs with no ability (FindAbilityTagFromSpec returns nothing),
+	// and a one-shot flag would swallow the retry that carries the real data.
+	for (const FGameplayAbilitySpec& Spec : GetActivatableAbilities())
 	{
-		bStartupAbilitiesGiven = true;
-		AbilitiesGiven.Broadcast();
+		if (!Spec.Ability) return;
 	}
+
+	// Every replicated change, not just the first: a later rep (equip, unlock, abilities granted
+	// after the first update) must reach the overlay too. Re-broadcasting the same info is harmless.
+	bStartupAbilitiesGiven = true;
+	AbilitiesGiven.Broadcast();
 }
 
 void UAuraAbilitySystemComponent::ClearAbilitiesOfSlot(const FGameplayTag& SlotTag)

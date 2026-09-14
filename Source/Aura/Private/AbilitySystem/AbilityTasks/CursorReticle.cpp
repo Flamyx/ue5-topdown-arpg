@@ -3,8 +3,9 @@
 
 #include "AbilitySystem/AbilityTasks/CursorReticle.h"
 
-#include "Engine/Engine.h"
+#include "Aura/Aura.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 
@@ -61,11 +62,6 @@ void UCursorReticle::Activate()
 
 void UCursorReticle::TickTask(float DeltaTime)
 {
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::Cyan,
-			FString::Printf(TEXT("CursorReticle::TickTask DeltaTime=%f"), DeltaTime));
-	}
 	Super::TickTask(DeltaTime);
 	if (!IsValid(Reticle) && !IsValid(ReticleComponent)) return;
 
@@ -100,5 +96,8 @@ bool UCursorReticle::GetCursorHit(FHitResult& OutHit) const
 {
 	const APlayerController* PC = Ability->GetCurrentActorInfo()->PlayerController.Get();
 	if (PC == nullptr) return false;
-	return PC->GetHitResultUnderCursor(ECC_Visibility, false, OutHit) && OutHit.bBlockingHit;
+	// Same channel as TargetDataUnderMouse, which picks the landing point on release - on
+	// Visibility the reticle and the landing point could disagree over the same geometry.
+	// Deliberately NOT smoothed: a targeted AoE's reticle must sit exactly where it will land.
+	return PC->GetHitResultUnderCursor(ECC_Target, false, OutHit) && OutHit.bBlockingHit;
 }

@@ -46,12 +46,26 @@ public:
 	FOnASCRegistered OnASCRegisteredDelegate;
 	FOnDeath OnDeathDelegate;
 	
-	UPROPERTY(Replicated) 
-	FVector_NetQuantize BeamEndLocation;
-	
+	/*
+	Channeling (driven by UAuraChanneledAbility on the server and the owning client)
+	*/
+
+	void BeginChanneling(const FVector& InitialAim);
+	void EndChanneling();
+	void SetAimLocation(const FVector& Location) { AimLocation = Location; }
+
+	/** Per-frame smoothed aim point: the beam end GC_ShockLoop draws to, and what the caster turns
+	 *  to face while channeling. Kept under this name so existing Blueprint calls still resolve. */
 	UFUNCTION(BlueprintPure, Category = "Combat")
-	FVector GetBeamEndLocation() const { return BeamEndLocation; }
-	
+	FVector GetBeamEndLocation() const { return SmoothedAimLocation; }
+
+	/** True on EVERY machine while channeling: set locally by the server and the owning client,
+	 *  replicated to everyone else. Drive the channel pose from this in the AnimBP - the old
+	 *  SetInShockLoop event only fires where the ability runs, so other clients never saw the loop. */
+	UFUNCTION(BlueprintPure, Category = "Combat|Channel")
+	bool IsChanneling() const { return bIsChanneling; }
+
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
@@ -129,7 +143,28 @@ protected:
 	
 	UFUNCTION(Server, Reliable)
 	void HandleKnockback(const FVector& KnockbackImpulse);
-	
+
+	/** Raw aim sample, written every aim tick. SkipOwner: the owner writes its own locally fresh
+	 *  cursor value, and the server's older copy would stomp it and make the beam end jitter. */
+	UPROPERTY(Replicated)
+	FVector_NetQuantize AimLocation;
+
+	UPROPERTY(ReplicatedUsing = OnRep_IsChanneling)
+	bool bIsChanneling = false;
+
+	UFUNCTION()
+	void OnRep_IsChanneling();
+
+	FVector SmoothedAimLocation = FVector::ZeroVector;
+
+	/** How quickly the smoothed aim point chases the raw samples. Higher = snappier sweep. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Channel", meta = (ClampMin = "0"))
+	float AimInterpSpeed = 15.f;
+
+	/** How quickly the caster turns toward the aim point while channeling. */
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Channel", meta = (ClampMin = "0"))
+	float ChannelTurnSpeed = 10.f;
+
 private:
 	UPROPERTY(EditAnywhere, Category = "Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;

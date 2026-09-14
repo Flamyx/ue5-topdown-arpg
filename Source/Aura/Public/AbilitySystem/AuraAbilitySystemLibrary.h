@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "AuraAbilityTypes.h"
 #include "AuraAbilitySystemLibrary.generated.h"
 
 class UAbilityInfo;
@@ -58,18 +59,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
 	static bool IsDebuffHit(const FGameplayEffectContextHandle& EffectContextHandle);
 	
+	/** True if at least one of the hit's debuffs landed. */
 	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
 	static bool IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle);
 
+	/** The debuffs that passed their roll on this hit (server-side only). */
 	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static float GetDebuffDuration(const FGameplayEffectContextHandle& EffectContextHandle);
-	
-	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static float GetDebuffFrequency(const FGameplayEffectContextHandle& EffectContextHandle);
-	
-	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static float GetDebuffDamage(const FGameplayEffectContextHandle& EffectContextHandle);
-	
+	static TArray<FAuraDebuffSpec> GetSuccessfulDebuffs(const FGameplayEffectContextHandle& EffectContextHandle);
+
 	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
 	static FGameplayTag GetDamageType(const FGameplayEffectContextHandle& EffectContextHandle);
 	
@@ -78,18 +75,6 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
 	static FVector GetKnockbackImpulse(const FGameplayEffectContextHandle& EffectContextHandle);
-	
-	UFUNCTION(BlueprintCallable, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static void SetIsSuccessfulDebuff(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, bool bInIsSuccessfulDebuff);
-	
-	UFUNCTION(BlueprintCallable, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static void SetDebuffDuration(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, float InDebuffDuration);
-	
-	UFUNCTION(BlueprintCallable, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static void SetDebuffFrequency(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, float InDebuffFrequency);
-	
-	UFUNCTION(BlueprintCallable, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
-	static void SetDebuffDamage(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, float InDebuffDamage);
 	
 	UFUNCTION(BlueprintCallable, Category = "AuraAbilitySystemLibrary|Gameplay Effects")
 	static void SetIsBlockedHit(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, bool bInIsBlockedHit);

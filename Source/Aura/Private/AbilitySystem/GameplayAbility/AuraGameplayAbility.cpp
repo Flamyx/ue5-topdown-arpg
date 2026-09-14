@@ -4,6 +4,8 @@
 #include "AbilitySystem/GameplayAbility/AuraGameplayAbility.h"
 
 #include "AbilitySystem/AuraAttributeSet.h"
+#include "AbilitySystemGlobals.h"
+#include "GameplayEffect.h"
 
 FString UAuraGameplayAbility::GetDescription(int32 Level, float Damage, const FString& Title)
 {
@@ -37,7 +39,13 @@ float UAuraGameplayAbility::GetManaCost(float Level) const
 		{
 			if (Modifier.Attribute == UAuraAttributeSet::GetManaAttribute())
 			{
-				const bool bSuccess = Modifier.ModifierMagnitude.GetStaticMagnitudeIfPossible(Level, ManaCost);
+				if (Modifier.ModifierMagnitude.GetStaticMagnitudeIfPossible(Level, ManaCost)) continue;
+
+				// Scaled cost (UMMC_ManaCost): evaluate it with no ability in the context, which the
+				// MMC treats as multiplier 1 - the tooltip shows the base cost, not a charge/beam state
+				const FGameplayEffectContextHandle Context(UAbilitySystemGlobals::Get().AllocGameplayEffectContext());
+				const FGameplayEffectSpec Spec(CostGE, Context, Level);
+				Modifier.ModifierMagnitude.AttemptCalculateMagnitude(Spec, ManaCost);
 			}
 		}
 	}

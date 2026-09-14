@@ -243,7 +243,7 @@ private:
 	void SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const;
 	void HandleIncomingDamage(const FEffectProperties& Props);
 	void HandleIncomingXP(const FEffectProperties& Props);
-	void Debuff(const FEffectProperties& Props);
+	void ApplyDebuff(const FEffectProperties& Props, const struct FAuraDebuffSpec& Debuff);
 	void Knockback(const FEffectProperties& Props);
 
 	void ShowFloatingText(const FEffectProperties& Props, float Damage, bool bBlockedHit, bool bCriticalHit) const;

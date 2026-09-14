@@ -98,10 +98,54 @@ void AAuraCharacterBase::MulticastHandleDeath_Implementation(const FVector& Deat
 void AAuraCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	// SkipOwner: the owning client writes this every AbilityTick from its own, locally fresh
-	// cursor. Replicating the server's copy back would stomp that with a value ~1 tick
-	// older and make the beam end jitter between the two. Everyone else gets the server's.
-	DOREPLIFETIME_CONDITION(AAuraCharacterBase, BeamEndLocation, COND_SkipOwner);
+	// SkipOwner on both: the owning client sets them itself from its own, locally fresh input.
+	// Replicating the server's copies back would stomp those with values ~1 tick older.
+	DOREPLIFETIME_CONDITION(AAuraCharacterBase, AimLocation, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AAuraCharacterBase, bIsChanneling, COND_SkipOwner);
+}
+
+void AAuraCharacterBase::BeginChanneling(const FVector& InitialAim)
+{
+	AimLocation = InitialAim;
+	SmoothedAimLocation = InitialAim;
+	bIsChanneling = true;
+}
+
+void AAuraCharacterBase::EndChanneling()
+{
+	bIsChanneling = false;
+}
+
+void AAuraCharacterBase::OnRep_IsChanneling()
+{
+	// Other clients: start smoothing from this cast's aim, not the point the previous cast ended
+	// on. Rep notifies fire after the whole update is applied, so AimLocation is already fresh.
+	if (bIsChanneling)
+	{
+		SmoothedAimLocation = AimLocation;
+	}
+}
+
+void AAuraCharacterBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!bIsChanneling) return;
+
+	// Smoothed on every machine: aim samples arrive every AimTickRate on the server/owner and at
+	// net-update rate elsewhere, and anything drawn from them would visibly step without this
+	SmoothedAimLocation = FMath::VInterpTo(SmoothedAimLocation, AimLocation, DeltaSeconds, AimInterpSpeed);
+
+	// Facing only where the rotation is authored. Simulated proxies receive the server's rotation
+	// through movement replication - turning them locally as well would fight it.
+	if (HasAuthority() || IsLocallyControlled())
+	{
+		FVector ToAim = SmoothedAimLocation - GetActorLocation();
+		ToAim.Z = 0.f;   // yaw only, or the caster tilts to look at a point on the floor
+		if (!ToAim.IsNearlyZero())
+		{
+			SetActorRotation(FMath::RInterpTo(GetActorRotation(), ToAim.Rotation(), DeltaSeconds, ChannelTurnSpeed));
+		}
+	}
 }
 
 // Called when the game starts or when spawned
